@@ -5,27 +5,32 @@ import numpy as np
 import datetime
 
 # ==============================================================
-# [1] 토스 프리미엄 디자인 & 레이아웃 설정
+# [1] 앱 설정 및 토스 프리미엄 디자인 CSS
 # ==============================================================
-st.set_page_config(page_title="하이브리드 투자 봇", page_icon="🎯", layout="wide")
+st.set_page_config(page_title="나의 투자 비서", page_icon="💰", layout="wide")
 
 # 오늘 날짜 (2026년 기준)
 TODAY = datetime.date.today()
-MAX_DATE = datetime.date(2026, 12, 31) 
+MAX_DATE = datetime.date(2026, 12, 31)
 
 st.markdown("""
 <style>
     @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
     * { font-family: 'Pretendard', sans-serif; }
+    
+    /* 토스 스타일 배경색 정의 */
     .toss-card { background-color: #f2f4f6; border-radius: 24px; padding: 28px; margin-bottom: 24px; }
-    .toss-card-white { background-color: #ffffff; border: 1px solid #e5e8eb; border-radius: 20px; padding: 20px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.03); }
+    .toss-card-white { background-color: #ffffff; border: 1px solid #e5e8eb; border-radius: 20px; padding: 20px; margin-bottom: 20px; }
+    
+    /* 실시간 수익 상태에 따른 풀 컬러 카드 */
+    .bg-profit { background-color: #f04452; color: white; border-radius: 24px; padding: 30px; margin-bottom: 24px; }
+    .bg-loss { background-color: #3182f6; color: white; border-radius: 24px; padding: 30px; margin-bottom: 24px; }
+    .bg-neutral { background-color: #333d4b; color: white; border-radius: 24px; padding: 30px; margin-bottom: 24px; }
+
     .toss-title { color: #191f28; font-weight: 800; font-size: 28px; margin-bottom: 8px; }
-    .toss-desc { color: #4e5968; font-size: 16px; margin-bottom: 32px; }
-    .toss-huge { font-size: 38px; font-weight: 900; letter-spacing: -1.2px; margin: 8px 0; }
-    .toss-red { color: #f04452; }
-    .toss-blue { color: #3182f6; }
     .toss-gray { color: #8b95a1; font-size: 14px; font-weight: 500; }
-    .toss-dark { color: #333d4b; font-weight: 700; font-size: 19px; }
+    .white-gray { color: rgba(255, 255, 255, 0.8); font-size: 14px; }
+    .toss-huge { font-size: 42px; font-weight: 900; letter-spacing: -1.2px; margin: 5px 0; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -40,21 +45,67 @@ def fmt_p(ticker, val):
     if ticker == "QLD": return f"${val:,.2f}"
     return f"{int(val):,}원"
 
-st.markdown("<div class='toss-title'>나만의 하이브리드 투자 봇 🤖</div>", unsafe_allow_html=True)
-
-tab1, tab2 = st.tabs(["🎯 오늘의 스나이퍼 타점", "📉 무제한 시뮬레이터"])
+# ==============================================================
+# [2] 사이드바 - 내 자산 설정 (데이터 입력)
+# ==============================================================
+with st.sidebar:
+    st.markdown("### 🏦 내 주식 설정")
+    my_ticker_label = st.selectbox("보유 종목", list(TICKER_OPTIONS.keys()))
+    my_ticker = TICKER_OPTIONS[my_ticker_label]
+    my_avg_price = st.number_input("나의 평단가", value=0.0, step=0.01)
+    my_quantity = st.number_input("보유 수량", value=0, step=1)
+    st.markdown("---")
+    st.write("사이드바에 입력하면 메인 화면에 실시간 수익이 계산됩니다.")
 
 # ==============================================================
-# [2] 탭 1: 스나이퍼 타점 계산기
+# [3] 메인 대시보드 - 실시간 잔고 현황 (Toss Emotional UI)
 # ==============================================================
+if my_avg_price > 0 and my_quantity > 0:
+    with st.spinner("실시간 시세 확인 중..."):
+        # 실시간 가격 가져오기
+        data = yf.download(my_ticker, period="1d", interval="1m", progress=False)
+        if not data.empty:
+            current_price = data['Close'].iloc[-1]
+            invested_amt = my_avg_price * my_quantity
+            current_amt = current_price * my_quantity
+            profit_amt = current_amt - invested_amt
+            profit_pct = (profit_amt / invested_amt) * 100
+            
+            # 상태에 따른 클래스 선택
+            status_class = "bg-profit" if profit_amt > 0 else "bg-loss" if profit_amt < 0 else "bg-neutral"
+            status_icon = "🔥" if profit_amt > 0 else "📉" if profit_amt < 0 else "⚖️"
+            
+            st.markdown(f"""
+            <div class='{status_class}'>
+                <div class='white-gray'>{my_ticker_label} 보유 중</div>
+                <div style='font-size: 20px; font-weight: bold;'>오늘 나의 수익 {status_icon}</div>
+                <div class='toss-huge'>{profit_amt:+,.0f}{"$" if my_ticker == "QLD" else "원"} ({profit_pct:+.2f}%)</div>
+                <div style='margin-top: 15px; font-size: 15px;'>
+                    내 자산: {fmt_p(my_ticker, current_amt)} / 평단가: {fmt_p(my_ticker, my_avg_price)}
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+else:
+    st.markdown("""
+    <div class='toss-card'>
+        <div class='toss-gray'>아직 등록된 자산이 없어요.</div>
+        <div class='toss-dark'>왼쪽 메뉴에서 내 평단가와 수량을 입력해 보세요! 🏦</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+# ==============================================================
+# [4] 탭 구성 (계산기 & 시뮬레이터)
+# ==============================================================
+tab1, tab2 = st.tabs(["🎯 스나이퍼 타점", "📉 무제한 시뮬레이션"])
+
 with tab1:
-    st.markdown("<div class='toss-desc'>오늘 장에서 사야 할지 팔아야 할지, 토스가 계산해 봤어요.</div>", unsafe_allow_html=True)
+    st.markdown("<div class='toss-desc'>오늘 장에서 사야 할지 팔아야 할지 계산해 봤어요.</div>", unsafe_allow_html=True)
     c1, c2 = st.columns(2)
-    selected_label = c1.selectbox("종목을 골라주세요", list(TICKER_OPTIONS.keys()))
+    selected_label = c1.selectbox("계산할 종목", list(TICKER_OPTIONS.keys()))
     ticker_t1 = TICKER_OPTIONS[selected_label]
 
-    if st.button("🔥 지금 가장 유리한 가격 확인하기", use_container_width=True):
-        with st.spinner("최신 시장 데이터 분석 중..."):
+    if st.button("🚀 지금 가장 유리한 가격 확인하기", use_container_width=True):
+        with st.spinner("데이터 분석 중..."):
             df_t = yf.download(ticker_t1, period="2y", auto_adjust=True, progress=False)
             df_m = yf.download("QQQ", period="2y", auto_adjust=True, progress=False)
             if df_t.index[-1].date() == TODAY:
@@ -79,7 +130,7 @@ with tab1:
             st.markdown(f"""
             <div class='toss-card'>
                 <div class='toss-gray'>기준일: {df_t.index[-1].strftime('%Y년 %m월 %d일')}</div>
-                <div style='font-size: 22px; font-weight: bold; color: #333d4b;'>지금 시장은 <span style='color:{"#f04452" if is_bull else "#3182f6"};'>{"상승장" if is_bull else "하락장"}</span> 이에요 📈</div>
+                <div style='font-size: 22px; font-weight: bold; color: #333d4b;'>시장은 현재 <span style='color:{"#f04452" if is_bull else "#3182f6"};'>{"상승장" if is_bull else "하락장"}</span> 이에요</div>
                 <div style='display:flex; justify-content:space-between; margin-top:20px; background:white; padding:18px; border-radius:14px;'>
                     <div><div class='toss-gray'>현재 가격</div><div class='toss-dark'>{fmt_p(ticker_t1, l_close)}</div></div>
                     <div><div class='toss-gray'>과열도(RSI)</div><div class='toss-dark'>{curr_rsi:.1f}</div></div>
@@ -88,30 +139,25 @@ with tab1:
             </div>
             """, unsafe_allow_html=True)
             ca, cb = st.columns(2)
-            ca.markdown(f"<div class='toss-card-white' style='border-top: 6px solid #f04452;'><div class='toss-gray'>🛒 사야 할 가격 (RSI {t_buy_rsi})</div><div class='toss-huge toss-red'>{fmt_p(ticker_t1, buy_p)}</div><div class='toss-gray'>지금보다 <b>{((buy_p/l_close-1)*100):+.2f}%</b> 낮을 때</div></div>", unsafe_allow_html=True)
-            cb.markdown(f"<div class='toss-card-white' style='border-top: 6px solid #3182f6;'><div class='toss-gray'>🎉 팔아야 할 가격 (RSI {t_sell_rsi})</div><div class='toss-huge toss-blue'>{fmt_p(ticker_t1, sell_p)}</div><div class='toss-gray'>지금보다 <b>{((sell_p/l_close-1)*100):+.2f}%</b> 높을 때</div></div>", unsafe_allow_html=True)
+            ca.markdown(f"<div class='toss-card-white' style='border-top: 6px solid #f04452;'><div class='toss-gray'>🛒 매수 목표가 (RSI {t_buy_rsi})</div><div class='toss-huge toss-red'>{fmt_p(ticker_t1, buy_p)}</div><div class='toss-gray'><b>{((buy_p/l_close-1)*100):+.2f}%</b> 낮아지면 사세요</div></div>", unsafe_allow_html=True)
+            cb.markdown(f"<div class='toss-card-white' style='border-top: 6px solid #3182f6;'><div class='toss-gray'>🎉 익절 목표가 (RSI {t_sell_rsi})</div><div class='toss-huge toss-blue'>{fmt_p(ticker_t1, sell_p)}</div><div class='toss-gray'><b>{((sell_p/l_close-1)*100):+.2f}%</b> 높아지면 파세요</div></div>", unsafe_allow_html=True)
 
-# ==============================================================
-# [3] 탭 2: 백테스트 시뮬레이터 (투자 기간 & 연도 추가)
-# ==============================================================
 with tab2:
-    st.markdown("<div class='toss-desc'>과거의 폭락장을 이 전략으로 버텼다면 지금 얼마가 되었을까요?</div>", unsafe_allow_html=True)
+    st.markdown("<div class='toss-desc'>투자 날짜와 기간에 따른 성적표를 확인해 보세요.</div>", unsafe_allow_html=True)
     with st.form("backtest_form"):
         c1, c2 = st.columns(2)
-        target_bt = c1.selectbox("종목 선택", list(TICKER_OPTIONS.keys()))
+        target_bt = c1.selectbox("백테스트 종목", list(TICKER_OPTIONS.keys()))
         TARGET_TICKER = TICKER_OPTIONS[target_bt]
-        
         c3, c4 = st.columns(2)
-        T_START = c3.date_input("투자 시작 날짜", value=datetime.date(2008, 1, 1), min_value=datetime.date(1990, 1, 1), max_value=MAX_DATE)
-        T_END = c4.date_input("투자 종료 날짜", value=TODAY, min_value=datetime.date(1990, 1, 1), max_value=MAX_DATE)
-        
+        T_START = c3.date_input("투자 시작일", value=datetime.date(2008, 1, 1), min_value=datetime.date(1990, 1, 1), max_value=MAX_DATE)
+        T_END = c4.date_input("투자 종료일", value=TODAY, min_value=datetime.date(1990, 1, 1), max_value=MAX_DATE)
         c5, c6 = st.columns(2)
-        INIT_CAP = c5.number_input("시작 금액 (원)", value=50000000, step=1000000)
-        MON_INJ = c6.number_input("매달 넣을 돈 (원)", value=2000000, step=100000)
-        submitted = st.form_submit_button("📉 시뮬레이션 결과 보기", use_container_width=True)
+        INIT_CAP = c5.number_input("시작 원금", value=50000000)
+        MON_INJ = c6.number_input("매달 추가 금액", value=2000000)
+        submitted = st.form_submit_button("📉 시뮬레이션 시작")
 
     if submitted:
-        with st.spinner("데이터 분석 중..."):
+        with st.spinner("과거 분석 중..."):
             START_D = T_START - datetime.timedelta(days=365)
             df_m = yf.download("QQQ", start=START_D, end=T_END, progress=False)['Close'].squeeze()
             df_t_c = yf.download(TARGET_TICKER, start=START_D, end=T_END, progress=False)['Close'].squeeze()
@@ -159,62 +205,24 @@ with tab2:
                 bv = bnh_shares * p; b_peak = max(b_peak, bv); b_mdd = min(b_mdd, (bv - b_peak)/b_peak*100)
                 qv = qqq_shares * q_p; q_peak = max(q_peak, qv); q_mdd = min(q_mdd, (qv - q_peak)/q_peak*100)
 
-            # 통계 데이터 (투자 기간 계산 추가)
             final_v = cash + shares * df['Target'].iloc[-1]
-            total_r = (final_v/invested-1)*100
-            
-            # 투자 기간 계산 (일수 및 연수)
-            total_days = (df.index[-1] - df.index[0]).days
+            total_r, total_days = (final_v/invested-1)*100, (df.index[-1] - df.index[0]).days
             yrs = total_days / 365.25
-            
-            cagr = ((final_v / invested)**(1/yrs)-1)*100 if yrs > 0 else 0
-            b_final = bnh_shares * df['Target'].iloc[-1]; b_r = (b_final/invested-1)*100; b_cagr = ((b_final/invested)**(1/yrs)-1)*100 if yrs > 0 else 0
-            q_final = qqq_shares * df['QQQ'].iloc[-1]; q_r = (q_final/invested-1)*100; q_cagr = ((q_final/invested)**(1/yrs)-1)*100 if yrs > 0 else 0
+            cagr = ((final_v/invested)**(1/yrs)-1)*100 if yrs > 0 else 0
+            b_final = bnh_shares * df['Target'].iloc[-1]; b_cagr = ((b_final/invested)**(1/yrs)-1)*100 if yrs > 0 else 0
 
-            # 📋 토스 스타일 성적표 카드 (투자 기간 강조)
             st.markdown(f"""
             <div class='toss-card'>
                 <h3 style='margin:0;'>{TARGET_TICKER} 투자 요약 📝</h3>
-                <p class='toss-desc'>
-                    {df.index[0].strftime('%Y.%m.%d')}부터 {df.index[-1].strftime('%Y.%m.%d')}까지<br>
-                    <b>총 {total_days:,}일 ({yrs:.1f}년)</b> 동안 <b>{invested/10000:,.0f}만원</b>을 넣었어요.
-                </p>
+                <p class='toss-desc'>{df.index[0].strftime('%Y.%m.%d')}부터 {total_days:,}일간의 기록이에요.</p>
                 <div class='toss-huge toss-{"red" if total_r>0 else "blue"}'>{(final_v-invested)/10000:+,.0f}만원 ({total_r:+.2f}%)</div>
-                <div style='background:white; padding:14px; border-radius:10px; font-size:14px; color:#4e5968;'>
-                    💡 그냥 가지고만 있었을 때보다 <b>{(final_v-b_final)/10000:,.0f}만원</b>을 더 {"지켜냈어요! 🛡️" if final_v>b_final else "잃었네요.."}
+                <div style='background:white; padding:12px; border-radius:10px; font-size:14px;'>
+                    💡 그냥 보유했을 때보다 <b>{(final_v-b_final)/10000:,.0f}만원</b> 더 {"벌었어요!" if final_v>b_final else "잃었네요.."}
                 </div>
             </div>
             """, unsafe_allow_html=True)
-
+            
             c1, c2, c3 = st.columns(3)
-            with c1:
-                st.markdown(f"<div class='toss-card-white'><div class='toss-gray'>내 전략 🎯</div><div class='toss-dark' style='font-size:24px;'>CAGR {cagr:.1f}%</div><div class='toss-gray'>최대낙폭: <b class='toss-blue'>{mdd:.1f}%</b></div></div>", unsafe_allow_html=True)
-            with c2:
-                st.markdown(f"<div class='toss-card-white'><div class='toss-gray'>{TARGET_TICKER} 단순 보유</div><div class='toss-dark' style='font-size:24px;'>CAGR {b_cagr:.1f}%</div><div class='toss-gray'>최대낙폭: <b class='toss-blue'>{b_mdd:.1f}%</b></div></div>", unsafe_allow_html=True)
-            with c3:
-                st.markdown(f"<div class='toss-card-white'><div class='toss-gray'>시장(QQQ) 성적</div><div class='toss-dark' style='font-size:24px;'>CAGR {q_cagr:.1f}%</div><div class='toss-gray'>최대낙폭: <b class='toss-blue'>{q_mdd:.1f}%</b></div></div>", unsafe_allow_html=True)
-
-            # 매매 통계 요약
-            st.markdown(f"""
-            <div class='toss-card-white'>
-                <div class='toss-gray'>매매 기록 분석</div>
-                <div style='display:flex; justify-content:space-between; margin-top:12px;'>
-                    <div><span class='toss-gray'>총 거래</span><br><span class='toss-dark'>{win+lose}회</span></div>
-                    <div><span class='toss-gray'>매매 승률</span><br><span class='toss-dark'>{(win/(win+lose)*100 if win+lose>0 else 0):.1f}% (익절 {win} / 손절 {lose})</span></div>
-                    <div><span class='toss-gray'>평균 보유일</span><br><span class='toss-dark'>{np.mean(hold_periods) if hold_periods else 0:.0f}일</span></div>
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-
-            st.markdown("<div class='toss-dark' style='margin:20px 0 10px 5px;'>상세 거래 내역</div>", unsafe_allow_html=True)
-            l_box = "<div style='background:white; border:1px solid #e5e8eb; border-radius:20px; height:450px; overflow-y:auto; padding:0 20px;'>"
-            for l in sorted(logs, key=lambda x: x['date'], reverse=True):
-                l_box += f"""
-                <div style='padding:20px 0; border-bottom:1px solid #f2f4f6; display:flex; align-items:center;'>
-                    <div style='font-size:26px; margin-right:16px;'>{l['icon']}</div>
-                    <div style='flex-grow:1;'>
-                        <div style='display:flex; justify-content:space-between;'><span style='font-weight:700; color:#191f28; font-size:16px;'>{l['title']}</span><span style='color:{l['color']}; font-weight:700; font-size:16px;'>{l['desc']}</span></div>
-                        <div style='display:flex; justify-content:space-between; font-size:13px; color:#8b95a1; margin-top:4px;'><span>{l['date']}</span><span>내 자산 {l['asset']/10000:,.0f}만원</span></div>
-                    </div>
-                </div>"""
-            st.markdown(l_box + "</div>", unsafe_allow_html=True)
+            c1.markdown(f"<div class='toss-card-white'><div class='toss-gray'>내 전략 CAGR</div><div class='toss-dark'>{cagr:.1f}%</div><div class='toss-gray'>MDD: {mdd:.1f}%</div></div>", unsafe_allow_html=True)
+            c2.markdown(f"<div class='toss-card-white'><div class='toss-gray'>B&H CAGR</div><div class='toss-dark'>{b_cagr:.1f}%</div><div class='toss-gray'>MDD: {b_mdd:.1f}%</div></div>", unsafe_allow_html=True)
+            c3.markdown(f"<div class='toss-card-white'><div class='toss-gray'>매매 승률</div><div class='toss-dark'>{(win/(win+lose)*100 if win+lose>0 else 0):.1f}%</div><div class='toss-gray'>총 {win+lose}회 거래</div></div>", unsafe_allow_html=True)
